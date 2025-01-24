@@ -1,1 +1,4 @@
-# Kentucky Mesonet @ WKU Machine Learning Model Development
+# Mesonet Data ML Model Development
+---
+
+For use at the Kentucky Mesonet at WKU
