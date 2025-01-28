@@ -70,5 +70,35 @@ An adaptive high-temporal resolution interpolation scheme for meterological obse
 
 ### Introduction
 
+Investigate using deep learning as a postprocessing tool to correct NWP vertical profiles of temp and dewpoint.
 
+what is RAP?
+- Rapid Refresh Model
+
+### Methods
+
+data from tornado alley area
+target values are 1D vertical profiles of temp and dwpnt
+
+#### RAOB
+
+#### RAP - Rapid Refresh
+
+#### RTMA
+
+#### GOES-16
+
+##### Evaluation Metrics
+
+- goal is to predict temp and dewpoint
+
+##### Machine Learning Models
+
+1. Model Architectures
+
+Explored are 4 different model architectures
+:   Linear Regression
+    Fully Connected Neural Networks
+    Convolutional Neural Networks
+    Deep Residual U-Nets
 
