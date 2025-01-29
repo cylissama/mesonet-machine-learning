@@ -2,6 +2,8 @@
 # Work Notes
 ###### Kentucky Mesonet Spring Machine Learning Efforts
 
+#### Contained here is the ml-soundings-archive-main
+This dir is the codebase of the Aies paper discussing data with ml
 
 Install Pymica
 
