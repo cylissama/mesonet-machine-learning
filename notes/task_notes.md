@@ -13,3 +13,9 @@ Install Pymica
 
 #### [ CIRA Course ](https://www.cira.colostate.edu/ml/home/)
 
+## Tue Feb 4
+
+Focus on pymica, specifically how to format our mesonet data into their codes.
+Start going through MOOC course
+ - I have already done the first module for this as of writing
+
