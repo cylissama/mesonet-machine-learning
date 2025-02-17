@@ -19,3 +19,10 @@ Focus on pymica, specifically how to format our mesonet data into their codes.
 Start going through MOOC course
  - I have already done the first module for this as of writing
 
+---
+
+## Mon Feb 17
+
+- Update climate codes to receive input data as formatted
+- format data for pymica
+- continue the MOOC

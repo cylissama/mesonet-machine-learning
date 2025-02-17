@@ -2,7 +2,7 @@
 
 # Tier 1 - ML in Weather & Climate
 
-## Introduction to ML in Weather & Climate
+### Introduction to ML in Weather & Climate
 
 Numerical weather prediction
 - the model 
@@ -33,3 +33,51 @@ Q: why machine learning?
 - automate time sensitive tasks
 - detect climate events in real time
 - emulate missing variables
+
+#### What is Machine Learning and what types are there?
+
+1. Supervised Learning
+- data with labels
+
+2. Unsupervised Learning
+- clustering
+- reduced complexity of data
+
+3. Semi-Supervised Learning
+- relies on partially labeled datasets
+
+4. Reinforcement Learning
+- define rules, reward correct choices
+
+#### Why should we consider Machine Learning for weather and climate modelling?
+
+##### Improve understanding
+- causal discovery
+- uncertainty quantification
+- fuse information from different datasets
+
+##### Speed up simulations and green computing
+- emulate model components
+- port emulators to heterogenous hardware
+- data compression
+- optimize workload
+
+##### Improve weather and climate models
+- learn components from observations
+- correct biases
+- quality control
+- feature detection
+
+##### Link communities
+- linking different datasets to map them together
+
+#### Challenges for Machine Learning in weather and climate modelling
+
+- too much data, 800 million daily observations
+- machine learning systems have to work reliably within th existing forecasting systems
+- ensure machine learning systems are robust and will be ok to change in the future
+
+### Observations
+
+1. Data in NWP
+
