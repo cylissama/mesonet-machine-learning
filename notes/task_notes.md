@@ -26,3 +26,10 @@ Start going through MOOC course
 - Update climate codes to receive input data as formatted
 - format data for pymica
 - continue the MOOC
+
+## Tue Feb 18 
+
+- subset the PRISM data for KY using the 4 lat long data points
+- format that data for the input of pymica
+- tmean and prcp
+

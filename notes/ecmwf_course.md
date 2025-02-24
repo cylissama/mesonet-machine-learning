@@ -81,3 +81,29 @@ Q: why machine learning?
 
 1. Data in NWP
 
+### Concept and state-of-the-art
+
+#### Earth System Models
+- predict weather up to a month ahead
+
+##### 5 Ingredients to earth system model
+
+1. Equations
+2. Grid-points
+3. Discretization
+4. Supercomputer
+5. Sub-grid-scale parametrization schemes
+
+### Forecasting with ML
+
+#### Approached to using ML
+
+1. _Acceleration_ - computational saving and increase model complexity for larger models
+2. _Model Improvement_ - replacing existing weather forecast models
+
+Both can lead to improvements in forecast quality
+
+Physical Parametrization Schemes
+
+### WeatherBench
+

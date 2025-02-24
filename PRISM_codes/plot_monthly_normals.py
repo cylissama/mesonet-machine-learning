@@ -39,6 +39,23 @@ def load_all_months(base_path):
 
     return monthly_data
 
+def heatmap():
+    # --- heatmap version
+
+    import seaborn as sns
+
+    plt.figure(figsize=(12, 8))
+    sns.kdeplot(x=df.longitude, y=df.latitude, 
+                weights=df.precipitation,
+                cmap='viridis', fill=True,
+                thresh=0.05, alpha=0.8)
+    plt.title("Precipitation Density in Kentucky")
+    plt.xlabel("Longitude")
+    plt.ylabel("Latitude")
+    plt.show()
+    
+    return
+
 def main():
     # Adjust base_path if necessary
     base_path = "/Volumes/Mesonet/winter_break/PRISM_data"
