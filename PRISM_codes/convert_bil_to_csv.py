@@ -3,34 +3,50 @@
 import rasterio
 import numpy as np
 import pandas as pd
+from datetime import datetime, timedelta
 
 # Configuration
-BIL_FILE = "/Volumes/Mesonet/spring_ml/PRISM_data/an/ppt/daily/2019/prism_ppt_us_30s_20190101.bil"  
-# /Volumes/Mesonet/spring_ml/PRISM_data/4km/ppt/2020/PRISM_ppt_stable_4kmM3_2020_all_bil/PRISM_ppt_stable_4kmM3_2020_bil.bil
-# Your input file
-CSV_OUTPUT = "prism_ppt_us_30s_20190101.csv"                  # Output CSV
+BIL_FILE = "/Volumes/Mesonet/spring_ml/PRISM_data/PRISM_Tmean2021/prism_tmean_us_30s_20210101.bil"
+CSV_OUTPUT = "test.csv"  # Output CSV
 SUBSAMPLE = 10  # Process every Nth pixel to reduce file size (set to 1 for all data)
+START_DATE = "2021-01-01"  # Start date for timestamps
+TIME_INTERVAL = 30  # Time interval in seconds
 
 # Read BIL file
 with rasterio.open(BIL_FILE) as src:
-    # Get raster data and metadata
+    # Get raster data
     data = src.read(1)  # Read first band
-    transform = src.transform
     nodata = src.nodata
+    transform = src.transform
 
-    # Generate coordinate grids
-    rows, cols = np.indices(data.shape)
-    xs, ys = rasterio.transform.xy(transform, rows.flatten(), cols.flatten())
+    print("Name: ", src.name)
+    print("Width: ", src.width)
+    print("Height: ", src.height)
+    print("Bounds: ", src.bounds)
+    print({i: dtype for i, dtype in zip(src.indexes, src.dtypes)})
+
+    # Generate coordinates
+    xs, ys = np.meshgrid(np.arange(src.width), np.arange(src.height))
+    xs, ys = rasterio.transform.xy(transform, ys, xs)
+    xs = np.array(xs).flatten()
+    ys = np.array(ys).flatten()
+
+# Generate timestamps
+start_date = datetime.strptime(START_DATE, "%Y-%m-%d")
+num_points = len(xs[::SUBSAMPLE])
+timestamps = [start_date + timedelta(seconds=i * TIME_INTERVAL) for i in range(num_points)]
 
 # Create DataFrame
 df = pd.DataFrame({
+    'timestamp': timestamps,
     'longitude': xs[::SUBSAMPLE],
     'latitude': ys[::SUBSAMPLE],
-    'precipitation': data.flatten()[::SUBSAMPLE]
+    'value': data.flatten()[::SUBSAMPLE]
 })
 
 # Filter out nodata values
-df = df[df['precipitation'] != nodata]
+if nodata is not None:
+    df = df[df['value'] != nodata]
 
 # Save to CSV
 df.to_csv(CSV_OUTPUT, index=False)

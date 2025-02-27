@@ -13,6 +13,13 @@ Install Pymica
 
 #### [ CIRA Course ](https://www.cira.colostate.edu/ml/home/)
 
+
+# General Info
+
+Subset KY points
+- Spatial: -89.813 -81.688
+            36.188  39.438
+
 ## Tue Feb 4
 
 Focus on pymica, specifically how to format our mesonet data into their codes.
@@ -32,4 +39,11 @@ Start going through MOOC course
 - subset the PRISM data for KY using the 4 lat long data points
 - format that data for the input of pymica
 - tmean and prcp
+
+## Thu Feb 27
+
+Get timestamps in the csv converted files
+PRCP and TMEAN are the data points to work with 
+
+
 

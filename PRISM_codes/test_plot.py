@@ -1,18 +1,8 @@
-import matplotlib.pyplot as plot
 import numpy as np
-from osgeo import gdal
+import rasterio
+from matplotlib import pyplot
 
-path = "/Volumes/Mesonet/winter_break/PRISM_data/4km_tmax_12/PRISM_tmax_30yr_normal_4kmM5_12_bil/PRISM_tmax_30yr_normal_4kmM5_12_bil.bil"
 
-data = gdal.Open(path)
-
-band = data.GetRasterBand(1)
-
-array = band.ReadAsArray().astype(np.float32)
-
-array[array == -9999] = np.nan
-
-data = None
-
-plot.imshow(array, cmap='viridis')
-plot.show()
+src = rasterio.open("/Volumes/Mesonet/spring_ml/PRISM_data/PRISM_Tmean2021/prism_tmean_us_30s_20210101.bil")
+pyplot.imshow(src.read(1), cmap='viridis')
+pyplot.show()
