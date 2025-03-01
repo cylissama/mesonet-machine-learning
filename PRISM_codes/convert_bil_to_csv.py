@@ -1,16 +1,23 @@
-# convert bil file to csv file
+# Cy Dixon 2025, MESONET WKU
+# convert bil file to csv file then add timestamps for the day to the csv file
 
 import rasterio
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Configuration
-BIL_FILE = "/Volumes/Mesonet/spring_ml/PRISM_data/PRISM_Tmean2021/prism_tmean_us_30s_20210101.bil"
-CSV_OUTPUT = "test.csv"  # Output CSV
-SUBSAMPLE = 10  # Process every Nth pixel to reduce file size (set to 1 for all data)
-START_DATE = "2021-01-01"  # Start date for timestamps
-TIME_INTERVAL = 30  # Time interval in seconds
+BASE_DATA_PATH = "/Volumes/Mesonet/PRISMdata_2021/tmean/2021/"
+var_type = BASE_DATA_PATH.rstrip('/').split('/')[-2]  # gets variable name
+year = BASE_DATA_PATH.rstrip('/').split('/')[-1]      # gets year, if needed
+BASE_DATA_DIR = BASE_DATA_PATH
+BIL_FILE = "prism_tmean_us_30s_20210101.bil"
+BIL_FILE = BASE_DATA_DIR + BIL_FILE
+# Extract the base filename from BIL_FILE and create CSV output path
+base_name = BIL_FILE.split('/')[-1].replace('.bil', '')
+CSV_OUTPUT = f"/Volumes/Mesonet/spring_ml/output_data/{base_name}_CONV.csv"
+SUBSAMPLE = 1  # Process every Nth pixel to reduce file size (set to 1 for all data)
+START_DATE = "2021-01-01 00:00:00"  # Start date for timestamps
 
 # Read BIL file
 with rasterio.open(BIL_FILE) as src:
@@ -19,35 +26,32 @@ with rasterio.open(BIL_FILE) as src:
     nodata = src.nodata
     transform = src.transform
 
-    print("Name: ", src.name)
-    print("Width: ", src.width)
-    print("Height: ", src.height)
-    print("Bounds: ", src.bounds)
-    print({i: dtype for i, dtype in zip(src.indexes, src.dtypes)})
-
     # Generate coordinates
     xs, ys = np.meshgrid(np.arange(src.width), np.arange(src.height))
     xs, ys = rasterio.transform.xy(transform, ys, xs)
     xs = np.array(xs).flatten()
     ys = np.array(ys).flatten()
 
-# Generate timestamps
-start_date = datetime.strptime(START_DATE, "%Y-%m-%d")
-num_points = len(xs[::SUBSAMPLE])
-timestamps = [start_date + timedelta(seconds=i * TIME_INTERVAL) for i in range(num_points)]
-
 # Create DataFrame
-df = pd.DataFrame({
-    'timestamp': timestamps,
+bil_data_df = pd.DataFrame({
     'longitude': xs[::SUBSAMPLE],
     'latitude': ys[::SUBSAMPLE],
-    'value': data.flatten()[::SUBSAMPLE]
+    var_type: data.flatten()[::SUBSAMPLE]
 })
 
+# add a column for timestamps
+timestamps = [datetime.strptime(START_DATE, "%Y-%m-%d %H:%M:%S") for _ in range(len(bil_data_df))]
+timestamps_df = pd.DataFrame(timestamps, columns=["timestamp"])
+timestamped_data = pd.concat([bil_data_df, timestamps_df], axis=1)
+
 # Filter out nodata values
+# this was why it appeared that the timestamps were incorrect, i understand it now
 if nodata is not None:
-    df = df[df['value'] != nodata]
+    timestamped_data = timestamped_data[timestamped_data[var_type] != nodata]
+
+# THIS TOOK 2m 15s TO RUN AND GENERATED A 1.2 GB CSV FILE
+# THIS HAD BEEN FIXED, RATHER AVOIDED
 
 # Save to CSV
-df.to_csv(CSV_OUTPUT, index=False)
-print(f"Saved {len(df)} points to {CSV_OUTPUT}")
+timestamped_data.to_csv(CSV_OUTPUT, index=False)
+print(f"Saved {len(timestamped_data)} points to {CSV_OUTPUT}")
