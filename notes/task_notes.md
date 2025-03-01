@@ -42,8 +42,17 @@ Start going through MOOC course
 
 ## Thu Feb 27
 
-Get timestamps in the csv converted files
-PRCP and TMEAN are the data points to work with 
+- Get timestamps in the csv converted files
+- PRCP and TMEAN are the data points to work with 
+
+## Fri Feb 28
+
+### [ pymica examples ](https://pymica.readthedocs.io/en/latest/01_howto_prepare_data.html)
+
+- Look over pymica data preperation files, look over csv file format
+- How do we tranform our data to match their input?
+- 1200km for the distance (in csv file)
+
 
 
 
