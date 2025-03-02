@@ -5,6 +5,46 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import os
+import re
+
+from osgeo.ogr import NullFID
+
+# Path to your data folder
+data_folder = "/Volumes/Mesonet/spring_ml/PRISM_data/PRISM_Tmean2021/"
+
+# Regex pattern to parse filenames
+pattern = r"^(\w+)_(\w+)_(\w+)_(\w+)_(\d{8})\.bil$"
+
+n = 0
+# Loop through all files in directory
+for filename in os.listdir(data_folder):
+    if filename.endswith(".bil"):
+        match = re.match(pattern, filename)
+        if match:
+            # Extract components
+            product = match.group(1)
+            variable = match.group(2)
+            region = match.group(3)
+            resolution = match.group(4)
+            date_str = match.group(5)
+
+            # Format date as YYYY-MM-DD
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+
+            # Print results
+            print(f"File: {filename}")
+            print(f"├─ Product: {product}")
+            print(f"├─ Variable: {variable}")
+            print(f"├─ Region: {region}")
+            print(f"├─ Resolution: {resolution}")
+            print(f"└─ Date: {formatted_date}\n")
+            n+=1
+        else:
+            print(f"Skipped non-matching file: {filename}")
+
+print(n)
+quit()
 
 # Configuration
 BIL_FILE = "/Volumes/Mesonet/spring_ml/PRISM_data/PRISM_Tmean2021/prism_tmean_us_30s_20210101.bil"
