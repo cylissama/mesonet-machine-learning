@@ -6,52 +6,79 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-# Configuration
-BASE_DATA_PATH = "/Volumes/Mesonet/PRISMdata_2021/tmean/2021/"
-var_type = BASE_DATA_PATH.rstrip('/').split('/')[-2]  # gets variable name
-year = BASE_DATA_PATH.rstrip('/').split('/')[-1]      # gets year, if needed
-BASE_DATA_DIR = BASE_DATA_PATH
-BIL_FILE = "prism_tmean_us_30s_20210101.bil"
-BIL_FILE = BASE_DATA_DIR + BIL_FILE
-# Extract the base filename from BIL_FILE and create CSV output path
-base_name = BIL_FILE.split('/')[-1].replace('.bil', '')
-CSV_OUTPUT = f"/Volumes/Mesonet/spring_ml/output_data/{base_name}_CONV.csv"
-SUBSAMPLE = 1  # Process every Nth pixel to reduce file size (set to 1 for all data)
-START_DATE = "2021-01-01 00:00:00"  # Start date for timestamps
+def read_bil_to_dataframe(bil_file, var_type, timestamp, subsample=1):
+    """
+    Reads a BIL file and returns a Pandas DataFrame with subsampled longitude, latitude, variable data, and timestamps.
 
-# Read BIL file
-with rasterio.open(BIL_FILE) as src:
-    # Get raster data
-    data = src.read(1)  # Read first band
-    nodata = src.nodata
-    transform = src.transform
+    Parameters:
+    - bil_file (str): Path to the BIL file.
+    - var_type (str): Column name for the extracted data values.
+    - timestamp (str): Start date in the format "%Y-%m-%d %H:%M:%S".
+    - subsample (int, optional): Subsampling factor to reduce data size. Default is 1 (no subsampling).
 
-    # Generate coordinates
-    xs, ys = np.meshgrid(np.arange(src.width), np.arange(src.height))
-    xs, ys = rasterio.transform.xy(transform, ys, xs)
-    xs = np.array(xs).flatten()
-    ys = np.array(ys).flatten()
+    Returns:
+    - pd.DataFrame: DataFrame containing 'longitude', 'latitude', the variable column, and 'timestamp'.
+    """
+    with rasterio.open(bil_file) as src:
+        # Read first band
+        data = src.read(1)
+        nodata = src.nodata
+        transform = src.transform
 
-# Create DataFrame
-bil_data_df = pd.DataFrame({
-    'longitude': xs[::SUBSAMPLE],
-    'latitude': ys[::SUBSAMPLE],
-    var_type: data.flatten()[::SUBSAMPLE]
-})
+        # Generate coordinates
+        xs, ys = np.meshgrid(np.arange(src.width), np.arange(src.height))
+        xs, ys = rasterio.transform.xy(transform, ys, xs)
+        xs = np.array(xs).flatten()
+        ys = np.array(ys).flatten()
+        data = data.flatten()
 
-# add a column for timestamps
-timestamps = [datetime.strptime(START_DATE, "%Y-%m-%d %H:%M:%S") for _ in range(len(bil_data_df))]
-timestamps_df = pd.DataFrame(timestamps, columns=["timestamp"])
-timestamped_data = pd.concat([bil_data_df, timestamps_df], axis=1)
+        # Create timestamps
+        timestamps = [datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S") for _ in range(len(xs))]
 
-# Filter out nodata values
-# this was why it appeared that the timestamps were incorrect, i understand it now
-if nodata is not None:
-    timestamped_data = timestamped_data[timestamped_data[var_type] != nodata]
+        # Create DataFrame with subsampling
+        df = pd.DataFrame({
+            'longitude': xs[::subsample],
+            'latitude': ys[::subsample],
+            var_type: data[::subsample],
+            'timestamp': [timestamps[i] for i in range(0, len(timestamps), subsample)]
+        })
 
-# THIS TOOK 2m 15s TO RUN AND GENERATED A 1.2 GB CSV FILE
-# THIS HAD BEEN FIXED, RATHER AVOIDED
+        # Filter out NoData values
+        if nodata is not None:
+            df = df[df[var_type] != nodata]
 
-# Save to CSV
-timestamped_data.to_csv(CSV_OUTPUT, index=False)
-print(f"Saved {len(timestamped_data)} points to {CSV_OUTPUT}")
+    return df
+
+def save_dataframe_to_csv(df, output_path):
+    """
+    Saves a Pandas DataFrame to a CSV file.
+
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to save.
+    - output_path (str): The file path where the CSV should be saved.
+
+    Returns:
+    - None
+    """
+    df.to_csv(output_path, index=False)
+    print(f"Saved {len(df)} points to {output_path}")
+
+def main():
+    # Configuration
+    base_data_path = "/Volumes/Mesonet/PRISMdata_2021/tmean/2021/"
+    var_type = base_data_path.rstrip('/').split('/')[-2]  # gets variable name
+    year = base_data_path.rstrip('/').split('/')[-1]  # gets year, if needed
+    base_data_dir = base_data_path
+    bil_file = "prism_tmean_us_30s_20210101.bil"
+    bil_file = base_data_dir + bil_file
+    # Extract the base filename from bil_file and create CSV output path
+    base_name = bil_file.split('/')[-1].replace('.bil', '')
+    csv_output = f"/Volumes/Mesonet/spring_ml/output_data/{base_name}_CONV.csv"
+    subsample = 1  # Process every Nth pixel to reduce file size (set to 1 for all data)
+    timestamp = "2021-01-01 00:00:00"  # Start date for timestamps
+
+    bil_data_df = read_bil_to_dataframe(bil_file, var_type, timestamp, subsample)
+    save_dataframe_to_csv(bil_data_df, csv_output)
+
+if __name__ == "__main__":
+    main()

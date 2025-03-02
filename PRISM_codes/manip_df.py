@@ -1,16 +1,27 @@
 import pandas as pd
 
-# Read the CSV file from the output_data directory
-df = pd.read_csv('/Volumes/Mesonet/spring_ml/output_data/prism_tmean_us_30s_20210101_CONV.csv')
 
-# Define your range
-min_value = -32
-max_value = -30
+# try using pymica tutorials
 
-# Get indices where values fall within range
-indices = df.index[(df['tmean'] >= min_value) & (df['tmean'] <= max_value)].tolist()
+file_data='/Volumes/Mesonet/spring_ml/output_data/prism_tmean_us_30s_20210101_CONV.csv'
 
-# Print the indices and corresponding values
-print("Indices within range:", indices)
-print("Values at these indices:")
-print(df.loc[indices, 'tmean'])
+station_data=pd.read_csv(file_data)
+
+print(station_data.head())
+
+# to prepare data for pymica we do the following
+
+data = []
+for key in station_data['key']:
+    df_data = station_data[station_data['key'] == key]
+    df_meta = metadata[metadata['key'] == key]
+    data.append(
+        {
+            'id': key,
+            'lon': float(df_meta['lon'].iloc[0]),
+            'lat': float(df_meta['lat'].iloc[0]),
+            'value': float(df_data['temp'].iloc[0]),
+            'altitude': float(df_meta['altitude'].iloc[0]),
+            'dist': float(df_meta['dist'].iloc[0])
+        }
+    )
