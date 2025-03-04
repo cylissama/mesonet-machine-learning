@@ -53,6 +53,7 @@ Start going through MOOC course
 - How do we tranform our data to match their input?
 - 1200km for the distance (in csv file)
 
+- Look at polars instead of pandas
 
 
 
