@@ -3,7 +3,7 @@ import pandas as pd
 
 # try using pymica tutorials
 
-file_data='/Volumes/Mesonet/spring_ml/output_data/prism_tmean_us_30s_20210101_CONV.csv'
+file_data='/Volumews/Mesonet/spring_ml/output_data/prism_tmean_us_30s_20210101_CONV.csv'
 
 station_data=pd.read_csv(file_data)
 
