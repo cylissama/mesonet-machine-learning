@@ -1,6 +1,9 @@
 #!/usr/bin/env python
+# Kelcee Gabbard
+
 """
 DEM Elevation Lookup Utility
+(DEM Data not included in repo)
 
 This script loads Digital Elevation Model (DEM) data from a MATLAB (.mat) file,
 creates a spatial index, and provides efficient lookup of elevation values
