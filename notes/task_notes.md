@@ -55,5 +55,17 @@ Start going through MOOC course
 
 - Look at polars instead of pandas
 
+## Mon Mar 17
+
+### Kelcee
+- Scikit learn python package
+    - Random forest regression 
+    - XGBoost regression
+- Tensor Flow if time allows
+
+### Cy
+- complete code to run through all the data
+
+
 
 
