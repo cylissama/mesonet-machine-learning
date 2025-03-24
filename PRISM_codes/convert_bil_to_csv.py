@@ -9,55 +9,56 @@ from datetime import datetime
 import os
 import re
 
-def prep_station_data(file_path, random_state=None): #  UNTESTED
+
+def prep_station_data(station_data, random_state=None):
     """
-    Prepares station data for analysis by adding synthetic columns (for now) and reordering columns
+    Prepares station data for analysis by adding synthetic columns and reordering columns
 
     Parameters:
-    file_path (str): Path to the input CSV file
+    station_data (pd.DataFrame): DataFrame containing station data
     random_state (int): Seed for reproducible random numbers (default: None)
 
     Returns:
     pd.DataFrame: Processed DataFrame with added columns and reordered columns
     """
-    # Read raw data
-    station_data = pd.read_csv(file_path)
-
     # Add synthetic columns with optional reproducibility
     rng = np.random.default_rng(random_state)
 
     station_data['key'] = range(1, len(station_data) + 1)
-    station_data['dist'] = rng.uniform(1, 100, len(station_data))
-    station_data['hr'] = rng.integers(0, 24, len(station_data))
-    station_data['altitude'] = rng.uniform(50, 500, len(station_data))
+    station_data['dist'] = 0.0
+    station_data['hr'] = 0.0
+    station_data['altitude'] = 0.0
 
     # Define column order
     base_columns = ['key', 'altitude', 'dist', 'hr', 'latitude', 'longitude', 'tmean']
-    other_columns = [col for col in station_data.columns if col not in base_columns]
+    other_columns = [col for col in station_data.columns if col not in base_columns and col in station_data.columns]
 
-    # Reorder columns
-    station_data = station_data.reindex(columns=base_columns + other_columns)
+    # Reorder columns (only include columns that exist in the DataFrame)
+    existing_columns = [col for col in base_columns if col in station_data.columns] + other_columns
+    station_data = station_data.reindex(columns=existing_columns)
 
     # data prep for pymica
     data = []
     for key in station_data['key'].head(10):
         df_data = station_data[station_data['key'] == key]
-        # df_meta = metadata[metadata['key'] == key]
+        value_col = 'tmean' if 'tmean' in station_data.columns else station_data.columns[0]
+
         data.append(
             {
                 'id': key,
                 'longitude': float(df_data['longitude'].iloc[0]),
                 'latitude': float(df_data['latitude'].iloc[0]),
-                'value': float(df_data['tmean'].iloc[0]),  # value for 'tmean' is manually placed
+                'value': float(df_data[value_col].iloc[0]),
                 'altitude': float(df_data['altitude'].iloc[0]),
                 'dist': float(df_data['dist'].iloc[0])
             }
         )
 
-    print('Sample data: ', data[0])
-    print('Number of points: ', len(data))
+    # print('Sample data: ', data[0])
+    # print('Number of points: ', len(data))
 
     return station_data
+
 
 def read_bil_to_dataframe(bil_file, var_type, timestamp, subsample=1):
     """
@@ -102,6 +103,7 @@ def read_bil_to_dataframe(bil_file, var_type, timestamp, subsample=1):
 
     return df
 
+
 def save_dataframe_to_csv(df, output_path):
     """
     Saves a Pandas DataFrame to a CSV file.
@@ -116,67 +118,76 @@ def save_dataframe_to_csv(df, output_path):
     df.to_csv(output_path, index=False)
     print(f"Saved {len(df)} points to {output_path}")
 
-def main():
-    # Configuration
-    base_data_path = "/Volumes/Mesonet/PRISMdata_2021/tmean/2021/prism_tmean_us_30s_20210101.bil" # could loop over
 
-    bil_file = "prism_tmean_us_30s_20210101.bil"
-    bil_file = base_data_path + bil_file
+def main(bil_file_path, output_folder=None, subsample=1, random_state=None):
+    """
+    Process a single BIL file, convert it to CSV with integrated data preparation.
 
-    path_without_extension = base_data_path.split(".")[0]
-    parts = path_without_extension.split("_")
+    Parameters:
+    - bil_file_path (str): Path to the BIL file to process
+    - output_folder (str, optional): Folder to save output CSV files.
+      If None, uses '/Volumes/Mesonet/spring_ml/output_data/'
+    - subsample (int, optional): Subsampling factor to reduce data size. Default is 1 (no subsampling).
+    - random_state (int, optional): Random seed for reproducible processing
 
-    product = parts[0]  # "prism"
-    variable = parts[1]  # "tmean"
-    region = parts[2]  # "us"
-    resolution = parts[3]  # "30s"
-    date_str = parts[4]  # "20210101" (YYYYMMDD format)
+    Returns:
+    - str: Path to the output CSV file
+    """
+    if output_folder is None:
+        output_folder = "/Volumes/Mesonet/spring_ml/output_data/"
 
+    # Create output folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
 
-    # Extract the base filename from bil_file and create CSV output path
-    base_name = bil_file.split('/')[-1].replace('.bil', '')
-    csv_output = f"/Volumes/Mesonet/spring_ml/output_data/{base_name}_CONV.csv"
-    subsample = 1  # Process every Nth pixel to reduce file size (set to 1 for all data)
-    timestamp = "2021-01-01 00:00:00"  # Start date for timestamps
+    # Extract filename from path
+    filename = os.path.basename(bil_file_path)
 
-    bil_data_df = read_bil_to_dataframe(bil_file, variable, timestamp, subsample)
-    save_dataframe_to_csv(bil_data_df, csv_output)
-
-# example loop
-'''
-    # Path to your data folder
-    data_folder = "/Volumes/Mesonet/spring_ml/PRISM_data/PRISM_Tmean2021/"
-
-    # Regex pattern to parse filenames
+    # Parse the filename to extract metadata
     pattern = r"^(\w+)_(\w+)_(\w+)_(\w+)_(\d{8})\.bil$"
+    match = re.match(pattern, filename)
 
-    n = 0
-    # Loop through all files in directory
-    for filename in os.listdir(data_folder):
-        if filename.endswith(".bil"):
-            match = re.match(pattern, filename)
-            if match:
-                # Extract components
-                product = match.group(1)
-                variable = match.group(2)
-                region = match.group(3)
-                resolution = match.group(4)
-                date_str = match.group(5)
+    if match:
+        product = match.group(1)
+        variable = match.group(2)
+        region = match.group(3)
+        resolution = match.group(4)
+        date_str = match.group(5)
 
-                # Format date as YYYY-MM-DD
-                formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+        # Format date for timestamp
+        formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} 00:00:00"
 
-                # Print results
-                print(f"File: {filename}")
-                print(f"├─ Product: {product}")
-                print(f"├─ Variable: {variable}")
-                print(f"├─ Region: {region}")
-                print(f"├─ Resolution: {resolution}")
-                print(f"└─ Date: {formatted_date}\n")
-                n += 1
-            else:
-                print(f"Skipped non-matching file: {filename}")
-'''
+        # Create output CSV filename
+        base_name = filename.replace('.bil', '')
+        csv_output = os.path.join(output_folder, f"{base_name}_CONV.csv")
+
+        # Process the BIL file
+        print(f"Reading BIL file: {bil_file_path}")
+        bil_data_df = read_bil_to_dataframe(bil_file_path, variable, formatted_date, subsample)
+
+        # Apply the prep_station_data function to further process the data
+        print(f"Preparing station data...")
+        processed_df = prep_station_data(bil_data_df, random_state=random_state)
+
+        # Save the processed data to CSV
+        save_dataframe_to_csv(processed_df, csv_output)
+
+        print(f"Processed: {filename}")
+        print(f"├─ Product: {product}")
+        print(f"├─ Variable: {variable}")
+        print(f"├─ Region: {region}")
+        print(f"├─ Resolution: {resolution}")
+        print(f"└─ Date: {formatted_date[:10]}\n")
+
+        return csv_output
+    else:
+        print(f"Skipped non-matching file: {filename}")
+        return None
+
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if len(sys.argv) > 1:
+        main(sys.argv[1])
+    else:
+        print("Usage: python convert_bil_to_csv.py <path_to_bil_file>")
