@@ -7,14 +7,67 @@ run with
 python master_conversion_driver.py /Volumes/PRISMdata/PRISM_data/an/ppt/daily/2019
 '''
 
-import os
 import argparse
+import os
 import time
 from datetime import datetime
-from convert_bil_to_csv import main as process_bil_file
+from convert_bil_to_csv import prep_station_data, save_dataframe_to_csv
+from nearest_grid_point import load_dem_data, downsample_dem_data, create_elevation_lookup
 
 
-def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_state=None):
+def initialize_elevation_lookup(dem_file_path=None, subset_factor=20):
+    """
+    Initialize the elevation lookup functionality.
+
+    Parameters:
+    - dem_file_path (str, optional): Path to the DEM data file
+    - subset_factor (int, optional): Downsampling factor for the DEM data
+
+    Returns:
+    - function: get_elevation function to lookup elevations
+    """
+    if dem_file_path is None:
+        dem_file_path = "/Volumes/Mesonet/spring_ml/DEMdata/DEMdata.mat"
+
+    # Load and prepare DEM data
+    print(f"Loading DEM data from {dem_file_path}...")
+    latitudes, longitudes, elevations = load_dem_data(dem_file_path)
+
+    # Downsample the DEM data for improved performance
+    print(f"Downsampling DEM data (factor: {subset_factor})...")
+    _, _, _, grid_points, elevation_values = downsample_dem_data(
+        latitudes, longitudes, elevations, subset_factor
+    )
+
+    # Create and return the lookup function
+    print("Creating elevation lookup function...")
+    get_elevation, _ = create_elevation_lookup(grid_points, elevation_values)
+
+    return get_elevation
+
+
+def add_elevation_to_dataframe(df, get_elevation):
+    """
+    Add elevation data to a dataframe based on latitude and longitude.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing 'latitude' and 'longitude' columns
+    - get_elevation (function): Function to lookup elevation for given coordinates
+
+    Returns:
+    - pd.DataFrame: DataFrame with 'altitude' column updated
+    """
+    # Update the altitude column directly
+    df['altitude'] = df.apply(
+        lambda row: get_elevation(row['latitude'], row['longitude']),
+        axis=1
+    )
+
+    print(f"Added elevation data to {len(df)} points")
+    return df
+
+
+def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_state=None, dem_file_path=None):
     """
     Process all BIL files in a directory in alphanumeric order.
 
@@ -24,6 +77,7 @@ def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_s
     - pattern (str, optional): Only process files matching this pattern (e.g., "2021")
     - subsample (int, optional): Subsampling factor for data reduction
     - random_state (int, optional): Random seed for reproducible processing
+    - dem_file_path (str, optional): Path to the DEM data file
 
     Returns:
     - tuple: (Number of files processed, List of output files)
@@ -43,6 +97,9 @@ def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_s
     print(f"Output will be saved to: {output_dir}")
     print(f"Subsample factor: {subsample}")
     print("-" * 50)
+
+    # Initialize elevation lookup function (do this once for all files)
+    get_elevation = initialize_elevation_lookup(dem_file_path)
 
     # Get all BIL files and sort them alphanumerically
     bil_files = [f for f in os.listdir(input_dir) if f.endswith(".bil")]
@@ -67,18 +124,55 @@ def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_s
         bil_file_path = os.path.join(input_dir, filename)
 
         try:
-            # Process the BIL file and prepare the data in one step
-            print(f"Processing {file_index + 1}/{len(bil_files)}: {filename}")
-            csv_output = process_bil_file(
-                bil_file_path,
-                output_dir,
-                subsample,
-                random_state=random_state
-            )
+            # Parse the filename to extract metadata (similar logic as in convert_bil_to_csv.py)
+            import re
+            pattern = r"^(\w+)_(\w+)_(\w+)_(\w+)_(\d{8})\.bil$"
+            match = re.match(pattern, os.path.basename(bil_file_path))
 
-            if csv_output:
-                output_files.append(csv_output)
-                processed_count += 1
+            if not match:
+                print(f"Skipped non-matching file: {filename}")
+                continue
+
+            product = match.group(1)
+            variable = match.group(2)
+            region = match.group(3)
+            resolution = match.group(4)
+            date_str = match.group(5)
+
+            # Format date for timestamp
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} 00:00:00"
+
+            # Create output CSV filename
+            base_name = os.path.basename(bil_file_path).replace('.bil', '')
+            csv_output = os.path.join(output_dir, f"{base_name}_CONV.csv")
+
+            # Use the process_bil_file function from convert_bil_to_csv but intercept before saving
+            from convert_bil_to_csv import read_bil_to_dataframe
+
+            print(f"Processing {file_index + 1}/{len(bil_files)}: {filename}")
+
+            # Read the BIL file to a DataFrame
+            bil_data_df = read_bil_to_dataframe(bil_file_path, variable, formatted_date, subsample)
+
+            # Prepare the station data
+            processed_df = prep_station_data(bil_data_df, random_state=random_state)
+
+            # Add elevation data
+            print("Adding elevation data...")
+            enhanced_df = add_elevation_to_dataframe(processed_df, get_elevation)
+
+            # Save the enhanced data to CSV
+            save_dataframe_to_csv(enhanced_df, csv_output)
+
+            output_files.append(csv_output)
+            processed_count += 1
+
+            print(f"Processed: {filename}")
+            print(f"├─ Product: {product}")
+            print(f"├─ Variable: {variable}")
+            print(f"├─ Region: {region}")
+            print(f"├─ Resolution: {resolution}")
+            print(f"└─ Date: {formatted_date[:10]}\n")
 
         except Exception as e:
             print(f"Error processing {filename}: {str(e)}")
@@ -114,6 +208,8 @@ def main():
                         help="Subsampling factor to reduce data size (default: 1, no subsampling)")
     parser.add_argument("--random_state", type=int, default=42,
                         help="Random seed for reproducible processing (default: 42)")
+    parser.add_argument("--dem_file", default=None,
+                        help="Path to the DEM data file (default: /Volumes/Mesonet/spring_ml/DEMdata/DEMdata.mat)")
 
     args = parser.parse_args()
 
@@ -137,7 +233,8 @@ def main():
         args.output_dir,
         args.pattern,
         args.subsample,
-        args.random_state
+        args.random_state,
+        args.dem_file
     )
 
 
