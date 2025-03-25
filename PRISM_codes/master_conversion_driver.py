@@ -12,7 +12,7 @@ import os
 import time
 from datetime import datetime
 from convert_bil_to_csv import prep_station_data, save_dataframe_to_csv
-from nearest_grid_point import load_dem_data, downsample_dem_data, create_elevation_lookup
+from dem_kd_tree import load_dem_data, downsample_dem_data, create_elevation_lookup
 
 
 def initialize_elevation_lookup(dem_file_path=None, subset_factor=20):
