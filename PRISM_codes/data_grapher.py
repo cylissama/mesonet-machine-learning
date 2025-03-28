@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-PRISM Data US Map Visualizer
+Kentucky PRISM Data Visualizer
 
-This script visualizes a single day of PRISM data on a US map, with
-special highlighting for Kentucky. It works with the processed CSV files
-created by the Kentucky subsetting processor.
+This script creates a detailed visualization of PRISM climate data specific to Kentucky.
+It works with the processed CSV files containing PRISM data subsetted to the Kentucky region.
+
+Features:
+- Detailed Kentucky state boundary
+- County boundaries and labels
+- Statistical metrics display
+- Custom colormaps for different climate variables
+- Optional basemap for geographic context
 
 Requirements:
 - pandas
 - geopandas
 - matplotlib
-- cartopy
 - contextily (optional, for basemaps)
 - seaborn (optional, for enhanced colormaps)
 
@@ -26,34 +31,23 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
-import matplotlib.colors as mcolors
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.lines import Line2D
 import geopandas as gpd
-
-# Import cartopy for map projections
-try:
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-
-    HAVE_CARTOPY = True
-except ImportError:
-    print("Warning: cartopy not installed. Using basic map visualization.")
-    HAVE_CARTOPY = False
 
 # Optional imports for enhanced visualization
 try:
     import contextily as ctx
-
     HAVE_CONTEXTILY = True
 except ImportError:
     HAVE_CONTEXTILY = False
+    print("Warning: contextily not installed. Basemap will not be available.")
 
 try:
     import seaborn as sns
-
     HAVE_SEABORN = True
 except ImportError:
     HAVE_SEABORN = False
+    print("Warning: seaborn not installed. Using default matplotlib colormaps.")
 
 
 def parse_filename(filename):
@@ -106,9 +100,27 @@ def load_csv_data(csv_path):
 
     # Basic data information
     print(f"Data shape: {df.shape}")
-    print(f"Value range: {df[var_col].min()} to {df[var_col].max()}")
+    print(f"Value range: {df[var_col].min():.2f} to {df[var_col].max():.2f}")
 
     return df, var_col
+
+
+def get_kentucky_shape():
+    """Get the Kentucky state boundary as a GeoDataFrame."""
+    print("Fetching Kentucky state boundary...")
+
+    # Download US states data
+    states = gpd.read_file(
+        "https://www2.census.gov/geo/tiger/TIGER2021/STATE/tl_2021_us_state.zip"
+    )
+
+    # Extract Kentucky
+    kentucky = states[states.NAME == "Kentucky"]
+
+    if len(kentucky) == 0:
+        raise ValueError("Kentucky boundary not found in the states dataset.")
+
+    return kentucky
 
 
 def get_custom_colormap(variable):
@@ -130,175 +142,167 @@ def get_custom_colormap(variable):
         return plt.cm.viridis
 
 
-def get_kentucky_shape():
-    """Get the Kentucky state boundary as a GeoDataFrame."""
-    # Download US states data
-    states = gpd.read_file(
-        "https://www2.census.gov/geo/tiger/TIGER2021/STATE/tl_2021_us_state.zip"
-    )
+def filter_to_kentucky(df):
+    """Filter data to Kentucky region based on bounding box coordinates."""
+    # Kentucky bounding box
+    ky_min_lon, ky_max_lon = -89.813, -81.688
+    ky_min_lat, ky_max_lat = 36.188, 39.438
 
-    # Extract Kentucky
-    kentucky = states[states.NAME == "Kentucky"]
+    # Filter data
+    ky_df = df[
+        (df['longitude'] >= ky_min_lon) &
+        (df['longitude'] <= ky_max_lon) &
+        (df['latitude'] >= ky_min_lat) &
+        (df['latitude'] <= ky_max_lat)
+    ]
 
-    return kentucky
-
-
-def create_us_map_with_cartopy(df, var_col, metadata, output_path=None, highlight_kentucky=True):
-    """Create a US map visualization with cartopy."""
-    print("Creating US map visualization with cartopy...")
-
-    # Set up the figure and projection
-    fig = plt.figure(figsize=(15, 10))
-    ax = fig.add_subplot(1, 1, 1, projection=ccrs.AlbersEqualArea(central_longitude=-96, central_latitude=38))
-
-    # Add US states
-    ax.add_feature(cfeature.STATES, linewidth=0.5, edgecolor='black')
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
-
-    # Set extent to continental US
-    ax.set_extent([-125, -66, 24, 50], crs=ccrs.PlateCarree())
-
-    # Get custom colormap based on variable
-    cmap = get_custom_colormap(metadata['variable'])
-
-    # Plot the data
-    sc = ax.scatter(
-        df['longitude'],
-        df['latitude'],
-        c=df[var_col],
-        cmap=cmap,
-        s=5,  # Point size
-        alpha=0.7,
-        transform=ccrs.PlateCarree()
-    )
-
-    # Highlight Kentucky if requested
-    if highlight_kentucky:
-        try:
-            # Get Kentucky state boundary
-            kentucky = get_kentucky_shape()
-
-            # Add Kentucky boundary with special styling
-            ax.add_geometries(
-                kentucky.geometry,
-                crs=ccrs.PlateCarree(),
-                edgecolor='red',
-                facecolor='none',
-                linewidth=2
-            )
-
-            # Add label for Kentucky (using centroid of the state)
-            centroid = kentucky.geometry.centroid.iloc[0]
-            txt = ax.text(
-                centroid.x, centroid.y,
-                "KENTUCKY",
-                transform=ccrs.PlateCarree(),
-                fontsize=12,
-                ha='center',
-                va='center',
-                color='red',
-                fontweight='bold'
-            )
-            txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='white')])
-
-        except Exception as e:
-            print(f"Could not add Kentucky boundary: {e}")
-            print("Falling back to bounding box...")
-
-            # Kentucky bounding box as fallback
-            ky_min_lon, ky_max_lon = -89.813, -81.688
-            ky_min_lat, ky_max_lat = 36.188, 39.438
-
-            # Draw rectangle around Kentucky
-            ky_box = plt.Rectangle(
-                (ky_min_lon, ky_min_lat),
-                ky_max_lon - ky_min_lon,
-                ky_max_lat - ky_min_lat,
-                linewidth=2,
-                edgecolor='red',
-                facecolor='none',
-                transform=ccrs.PlateCarree()
-            )
-            ax.add_patch(ky_box)
-
-            # Add label for Kentucky
-            txt = ax.text(
-                (ky_min_lon + ky_max_lon) / 2,
-                (ky_min_lat + ky_max_lat) / 2,
-                "KENTUCKY",
-                transform=ccrs.PlateCarree(),
-                fontsize=12,
-                ha='center',
-                va='center',
-                color='red',
-                fontweight='bold'
-            )
-            txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='white')])
-
-    # Add a colorbar
-    cbar = plt.colorbar(sc, ax=ax, orientation='horizontal', pad=0.05, aspect=40)
-    variable_name = metadata['variable'].upper()
-
-    # Add appropriate units based on variable
-    if variable_name in ['TMEAN', 'TMAX', 'TMIN']:
-        cbar.set_label(f"{variable_name} (°C)")
-    elif variable_name in ['PPT']:
-        cbar.set_label(f"{variable_name} (mm)")
-    else:
-        cbar.set_label(variable_name)
-
-    # Set title
-    plt.title(
-        f"PRISM {variable_name} - {metadata['date']}\n{metadata['product']} {metadata['resolution']}",
-        fontsize=16
-    )
-
-    # Add a small credit text
-    plt.figtext(
-        0.01, 0.01,
-        "Data: PRISM Climate Group | Visualization: KY MESONET @ WKU",
-        fontsize=8
-    )
-
-    # Save or show the figure
-    if output_path:
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"Map saved to {output_path}")
-    else:
-        plt.show()
-
-    plt.close()
+    return ky_df
 
 
-def create_basic_us_map(df, var_col, metadata, output_path=None, highlight_kentucky=True):
-    """Create a basic US map visualization without cartopy."""
-    print("Creating basic US map visualization...")
+def calculate_metrics(df, var_col):
+    """Calculate statistical metrics for the variable."""
+    metrics = {
+        'Min': df[var_col].min(),
+        'Max': df[var_col].max(),
+        'Mean': df[var_col].mean(),
+        'Median': df[var_col].median(),
+        'Std Dev': df[var_col].std()
+    }
+
+    # Add total for precipitation data (if dataset is not too large)
+    if var_col.lower() in ['ppt', 'precipitation'] and len(df) < 10000:
+        metrics['Total'] = df[var_col].sum()
+
+    return metrics
+
+
+def create_kentucky_map(df, var_col, metadata, output_path=None, show_counties=True,
+                        show_metrics=True, show_basemap=True):
+    """
+    Create a detailed map of Kentucky with climate data.
+
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame containing the data to visualize
+    var_col : str
+        Name of the column containing the variable data to plot
+    metadata : dict
+        Dictionary with metadata about the data (from parse_filename)
+    output_path : str, optional
+        Path to save the map image
+    show_counties : bool, default=True
+        Whether to show county boundaries
+    show_metrics : bool, default=True
+        Whether to show detailed statistics
+    show_basemap : bool, default=True
+        Whether to show a basemap (requires contextily)
+    """
+    print("Creating Kentucky map visualization...")
+
+    # Filter data to Kentucky if needed
+    ky_df = filter_to_kentucky(df)
+
+    if len(ky_df) == 0:
+        print("No data points found in Kentucky region. Cannot create map.")
+        return
+
+    print(f"Using {len(ky_df)} data points for Kentucky map.")
 
     # Convert to GeoDataFrame for mapping
     gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df['longitude'], df['latitude']),
+        ky_df,
+        geometry=gpd.points_from_xy(ky_df['longitude'], ky_df['latitude']),
         crs="EPSG:4326"  # WGS84
     )
 
     # Create figure and axis
-    fig, ax = plt.subplots(figsize=(15, 10))
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    # Get Kentucky state boundary
+    kentucky = get_kentucky_shape()
+
+    # Make sure the CRS matches
+    if kentucky.crs != gdf.crs:
+        kentucky = kentucky.to_crs(gdf.crs)
+
+    # Get bounds from Kentucky shape
+    bounds = kentucky.total_bounds  # [minx, miny, maxx, maxy]
+
+    # Add a buffer to the bounds
+    buffer = 0.1
+    bounds_with_buffer = [
+        bounds[0] - buffer,  # minx
+        bounds[1] - buffer,  # miny
+        bounds[2] + buffer,  # maxx
+        bounds[3] + buffer   # maxy
+    ]
 
     # Get custom colormap based on variable
     cmap = get_custom_colormap(metadata['variable'])
+
+    # Plot Kentucky boundary first
+    kentucky.boundary.plot(
+        ax=ax,
+        edgecolor='black',
+        linewidth=1.5
+    )
+
+    # Add counties if requested
+    if show_counties:
+        try:
+            print("Fetching and plotting county boundaries...")
+            counties = gpd.read_file(
+                "https://www2.census.gov/geo/tiger/TIGER2021/COUNTY/tl_2021_us_county.zip"
+            )
+            ky_counties = counties[counties.STATEFP == '21']  # Kentucky FIPS code is 21
+
+            if ky_counties.crs != gdf.crs:
+                ky_counties = ky_counties.to_crs(gdf.crs)
+
+            # Plot county boundaries
+            ky_counties.boundary.plot(
+                ax=ax,
+                edgecolor='gray',
+                linewidth=0.5
+            )
+
+            # Add county names for larger counties
+            for idx, county in ky_counties.iterrows():
+                # Only label counties with area larger than threshold
+                if county.geometry.area > 0.05:  # Adjust threshold as needed
+                    centroid = county.geometry.centroid
+                    ax.text(
+                        centroid.x, centroid.y,
+                        county.NAME,
+                        fontsize=8,
+                        ha='center',
+                        va='center',
+                        color='black',
+                        alpha=0.7
+                    )
+        except Exception as e:
+            print(f"Could not add county boundaries: {e}")
 
     # Plot the data points
     scatter = gdf.plot(
         ax=ax,
         column=var_col,
         cmap=cmap,
-        markersize=5,
+        markersize=20,
         alpha=0.7,
-        legend=True
+        legend=True,
+        legend_kwds={
+            'label': f"{metadata['variable'].upper()} Value",
+            'orientation': 'horizontal',
+            'shrink': 0.6,
+            'pad': 0.05,
+            'fraction': 0.046
+        }
     )
 
-    # Add basemap if contextily is available
-    if HAVE_CONTEXTILY:
+    # Add basemap if requested and available
+    if show_basemap and HAVE_CONTEXTILY:
         try:
             ctx.add_basemap(
                 ax,
@@ -308,76 +312,58 @@ def create_basic_us_map(df, var_col, metadata, output_path=None, highlight_kentu
         except Exception as e:
             print(f"Could not add basemap: {e}")
 
-    # Highlight Kentucky if requested
-    if highlight_kentucky:
-        try:
-            # Get Kentucky state boundary
-            kentucky = get_kentucky_shape()
+    # Calculate and display metrics if requested
+    if show_metrics:
+        metrics = calculate_metrics(ky_df, var_col)
 
-            # Make sure the CRS matches
-            if kentucky.crs != gdf.crs:
-                kentucky = kentucky.to_crs(gdf.crs)
+        # Format metrics text based on variable type
+        variable_name = metadata['variable'].upper()
 
-            # Plot Kentucky boundary with special styling
-            kentucky.boundary.plot(
-                ax=ax,
-                edgecolor='red',
-                linewidth=2
-            )
+        if variable_name in ['TMEAN', 'TMAX', 'TMIN']:
+            # Temperature metrics
+            metrics_text = (f"Kentucky Temperature Metrics (°C):\n"
+                          f"Min: {metrics['Min']:.1f}   Max: {metrics['Max']:.1f}   "
+                          f"Mean: {metrics['Mean']:.1f}   Median: {metrics['Median']:.1f}   "
+                          f"Std Dev: {metrics['Std Dev']:.1f}")
+            unit = "°C"
 
-            # Add label for Kentucky (using centroid of the state)
-            centroid = kentucky.geometry.centroid.iloc[0]
-            txt = ax.text(
-                centroid.x, centroid.y,
-                "KENTUCKY",
-                fontsize=12,
-                ha='center',
-                va='center',
-                color='red',
-                fontweight='bold'
-            )
-            txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='white')])
+        elif variable_name in ['PPT']:
+            # Precipitation metrics
+            metrics_text = (f"Kentucky Precipitation Metrics (mm):\n"
+                          f"Min: {metrics['Min']:.1f}   Max: {metrics['Max']:.1f}   "
+                          f"Mean: {metrics['Mean']:.1f}   Std Dev: {metrics['Std Dev']:.1f}")
 
-        except Exception as e:
-            print(f"Could not add Kentucky boundary: {e}")
-            print("Falling back to bounding box...")
+            if 'Total' in metrics:
+                metrics_text += f"\nTotal Precipitation: {metrics['Total']:.1f} mm"
+            unit = "mm"
 
-            # Kentucky bounding box as fallback
-            ky_min_lon, ky_max_lon = -89.813, -81.688
-            ky_min_lat, ky_max_lat = 36.188, 39.438
+        else:
+            # Generic metrics
+            metrics_text = (f"Kentucky {variable_name} Metrics:\n"
+                          f"Min: {metrics['Min']:.1f}   Max: {metrics['Max']:.1f}   "
+                          f"Mean: {metrics['Mean']:.1f}   Median: {metrics['Median']:.1f}   "
+                          f"Std Dev: {metrics['Std Dev']:.1f}")
+            unit = ""
 
-            # Draw rectangle around Kentucky
-            ky_box = plt.Rectangle(
-                (ky_min_lon, ky_min_lat),
-                ky_max_lon - ky_min_lon,
-                ky_max_lat - ky_min_lat,
-                linewidth=2,
-                edgecolor='red',
-                facecolor='none'
-            )
-            ax.add_patch(ky_box)
-
-            # Add label for Kentucky
-            txt = ax.text(
-                (ky_min_lon + ky_max_lon) / 2,
-                (ky_min_lat + ky_max_lat) / 2,
-                "KENTUCKY",
-                fontsize=12,
-                ha='center',
-                va='center',
-                color='red',
-                fontweight='bold'
-            )
-            txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='white')])
+        # Add metrics textbox
+        plt.figtext(0.5, 0.01, metrics_text, ha='center', fontsize=11,
+                   bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
 
     # Set title and labels
     variable_name = metadata['variable'].upper()
-    plt.title(
-        f"PRISM {variable_name} - {metadata['date']}\n{metadata['product']} {metadata['resolution']}",
-        fontsize=16
-    )
+    full_title = f"PRISM {variable_name} for Kentucky - {metadata['date']}\n{metadata['product']} {metadata['resolution']}"
+    plt.title(full_title, fontsize=16)
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
+
+    # Add a map legend for boundaries
+    legend_elements = []
+    legend_elements.append(Line2D([0], [0], color='black', lw=1.5, label='Kentucky Boundary'))
+
+    if show_counties:
+        legend_elements.append(Line2D([0], [0], color='gray', lw=0.5, label='County Boundaries'))
+
+    ax.legend(handles=legend_elements, loc='upper right', framealpha=0.7)
 
     # Add a small credit text
     plt.figtext(
@@ -386,156 +372,42 @@ def create_basic_us_map(df, var_col, metadata, output_path=None, highlight_kentu
         fontsize=8
     )
 
-    # Adjust to US extent
-    plt.xlim(-125, -66)
-    plt.ylim(24, 50)
-
-    # Save or show the figure
-    if output_path:
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"Map saved to {output_path}")
-    else:
-        plt.show()
-
-    plt.close()
-
-
-def create_zoomed_kentucky_map(df, var_col, metadata, output_path=None):
-    """Create a zoomed-in map of Kentucky."""
-    print("Creating zoomed Kentucky map...")
-
-    # Convert to GeoDataFrame for mapping
-    gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df['longitude'], df['latitude']),
-        crs="EPSG:4326"  # WGS84
-    )
-
-    # Filter for Kentucky region
-    ky_min_lon, ky_max_lon = -89.813, -81.688
-    ky_min_lat, ky_max_lat = 36.188, 39.438
-
-    ky_gdf = gdf[
-        (gdf['longitude'] >= ky_min_lon) &
-        (gdf['longitude'] <= ky_max_lon) &
-        (gdf['latitude'] >= ky_min_lat) &
-        (gdf['latitude'] <= ky_max_lat)
-        ]
-
-    if len(ky_gdf) == 0:
-        print("No data points found in Kentucky region. Skipping Kentucky map.")
-        return
-
-    print(f"Found {len(ky_gdf)} data points in Kentucky region.")
-
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=(12, 8))
-
-    # Get Kentucky state boundary
-    try:
-        kentucky = get_kentucky_shape()
-        # Make sure the CRS matches
-        if kentucky.crs != ky_gdf.crs:
-            kentucky = kentucky.to_crs(ky_gdf.crs)
-
-        # Get better bounds from the actual Kentucky shape
-        bounds = kentucky.total_bounds  # [minx, miny, maxx, maxy]
-        bounds_with_buffer = [
-            bounds[0] - 0.1,  # minx
-            bounds[1] - 0.1,  # miny
-            bounds[2] + 0.1,  # maxx
-            bounds[3] + 0.1  # maxy
-        ]
-    except Exception as e:
-        print(f"Could not get Kentucky boundary for zoomed map: {e}")
-        # Fall back to the bounding box
-        bounds_with_buffer = [
-            ky_min_lon - 0.2,
-            ky_min_lat - 0.2,
-            ky_max_lon + 0.2,
-            ky_max_lat + 0.2
-        ]
-
-    # Get custom colormap based on variable
-    cmap = get_custom_colormap(metadata['variable'])
-
-    # Plot Kentucky boundary first
-    try:
-        kentucky.boundary.plot(
-            ax=ax,
-            edgecolor='black',
-            linewidth=1.5
-        )
-    except Exception as e:
-        print(f"Could not plot Kentucky boundary: {e}")
-
-    # Plot the data points
-    scatter = ky_gdf.plot(
-        ax=ax,
-        column=var_col,
-        cmap=cmap,
-        markersize=30,
-        alpha=0.7,
-        legend=True
-    )
-
-    # Add basemap if contextily is available
-    if HAVE_CONTEXTILY:
-        try:
-            ctx.add_basemap(
-                ax,
-                crs=ky_gdf.crs,
-                source=ctx.providers.CartoDB.Positron
-            )
-        except Exception as e:
-            print(f"Could not add basemap: {e}")
-
-    # Set title and labels
-    variable_name = metadata['variable'].upper()
-    plt.title(
-        f"PRISM {variable_name} for Kentucky - {metadata['date']}\n{metadata['product']} {metadata['resolution']}",
-        fontsize=16
-    )
-    plt.xlabel("Longitude")
-    plt.ylabel("Latitude")
-
-    # Add a small credit text
-    plt.figtext(
-        0.01, 0.01,
-        "Data: PRISM Climate Group | Visualization: KY MESONET @ WKU",
-        fontsize=8
-    )
-
-    # Set extent to Kentucky (with buffer)
+    # Set extent to Kentucky with buffer
     plt.xlim(bounds_with_buffer[0], bounds_with_buffer[2])
     plt.ylim(bounds_with_buffer[1], bounds_with_buffer[3])
 
     # Save or show the figure
     if output_path:
-        # Modify filename to indicate Kentucky zoom
-        base, ext = os.path.splitext(output_path)
-        ky_output_path = f"{base}_kentucky{ext}"
+        # Make sure the output directory exists
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-        plt.savefig(ky_output_path, dpi=300, bbox_inches='tight')
-        print(f"Kentucky map saved to {ky_output_path}")
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"Kentucky map saved to {output_path}")
     else:
         plt.show()
 
     plt.close()
 
+    # Return some information about the visualization
+    return {
+        'num_points': len(ky_df),
+        'metrics': metrics if show_metrics else None,
+        'bounds': bounds_with_buffer
+    }
+
 
 def main():
     """Main execution function."""
-    parser = argparse.ArgumentParser(description="Visualize PRISM data on a US map")
+    parser = argparse.ArgumentParser(description="Visualize PRISM data on a Kentucky map")
     parser.add_argument("csv_file", help="Path to the processed CSV file")
     parser.add_argument("--output", "-o", default=None,
-                        help="Path to save the output image file (e.g., map.png)")
-    parser.add_argument("--no-kentucky-highlight", action="store_true",
-                        help="Disable Kentucky highlighting on the map")
-    parser.add_argument("--create-kentucky-map", action="store_true",
-                        help="Create an additional zoomed-in map of Kentucky")
-    parser.add_argument("--use-cartopy", action="store_true",
-                        help="Use cartopy for better map visualization (if installed)")
+                      help="Path to save the output image file (e.g., ky_map.png)")
+    parser.add_argument("--no-counties", action="store_true",
+                      help="Disable county boundaries on the map")
+    parser.add_argument("--no-metrics", action="store_true",
+                      help="Disable detailed metrics display")
+    parser.add_argument("--no-basemap", action="store_true",
+                      help="Disable basemap background")
 
     args = parser.parse_args()
 
@@ -545,7 +417,7 @@ def main():
         # Generate output path based on input filename
         base_dir = os.path.dirname(args.csv_file)
         base_name = os.path.splitext(os.path.basename(args.csv_file))[0]
-        output_path = os.path.join(base_dir, f"{base_name}_map.png")
+        output_path = os.path.join(base_dir, f"{base_name}_ky_map.png")
 
     # Load the data
     df, var_col = load_csv_data(args.csv_file)
@@ -558,26 +430,24 @@ def main():
         metadata = {
             'product': 'PRISM',
             'variable': var_col,
-            'region': 'unknown',
+            'region': 'Kentucky',
             'resolution': 'unknown',
             'date': datetime.now().strftime('%Y-%m-%d')
         }
 
-    # Create the map visualization
-    if args.use_cartopy and HAVE_CARTOPY:
-        create_us_map_with_cartopy(
-            df, var_col, metadata, output_path,
-            highlight_kentucky=not args.no_kentucky_highlight
-        )
-    else:
-        create_basic_us_map(
-            df, var_col, metadata, output_path,
-            highlight_kentucky=not args.no_kentucky_highlight
-        )
+    # Create the Kentucky map
+    result = create_kentucky_map(
+        df,
+        var_col,
+        metadata,
+        output_path,
+        show_counties=not args.no_counties,
+        show_metrics=not args.no_metrics,
+        show_basemap=not args.no_basemap
+    )
 
-    # Create additional Kentucky map if requested
-    if args.create_kentucky_map:
-        create_zoomed_kentucky_map(df, var_col, metadata, output_path)
+    if result:
+        print(f"Successfully created Kentucky map with {result['num_points']} data points.")
 
 
 if __name__ == "__main__":
