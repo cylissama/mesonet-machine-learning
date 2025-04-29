@@ -27,6 +27,11 @@ from scipy.spatial import cKDTree
 KY_MIN_LON, KY_MAX_LON = -89.813, -81.688
 KY_MIN_LAT, KY_MAX_LAT = 36.188, 39.438
 
+# Global variables for elevation lookup
+ELEVATION_LOOKUP = None
+ELEVATION_GRID_POINTS = None
+ELEVATION_VALUES = None
+
 
 def load_dem_data(file_path):
     """
@@ -97,6 +102,38 @@ def create_elevation_lookup(grid_points, elevation_values):
     return get_elevation
 
 
+def initialize_elevation_lookup(dem_file_path, factor=20):
+    """
+    Initialize the global elevation lookup function if not already initialized.
+
+    Args:
+        dem_file_path (str): Path to the DEM data file
+        factor (int): Downsampling factor for the DEM data
+
+    Returns:
+        function: Elevation lookup function
+    """
+    global ELEVATION_LOOKUP, ELEVATION_GRID_POINTS, ELEVATION_VALUES
+
+    if ELEVATION_LOOKUP is None and dem_file_path:
+        start_time = time.time()
+        print("Initializing elevation lookup table (one-time operation)...")
+
+        # Load and downsample DEM data
+        latitudes, longitudes, elevations = load_dem_data(dem_file_path)
+        ELEVATION_GRID_POINTS, ELEVATION_VALUES = downsample_dem_data(
+            latitudes, longitudes, elevations, factor
+        )
+
+        # Create lookup function
+        ELEVATION_LOOKUP = create_elevation_lookup(ELEVATION_GRID_POINTS, ELEVATION_VALUES)
+
+        elapsed = time.time() - start_time
+        print(f"Elevation lookup table initialized in {elapsed:.2f} seconds")
+
+    return ELEVATION_LOOKUP
+
+
 def subset_bil_to_kentucky(bil_file, var_type, timestamp, subsample=1):
     """
     Extracts Kentucky region data from a BIL file and returns as DataFrame.
@@ -110,6 +147,7 @@ def subset_bil_to_kentucky(bil_file, var_type, timestamp, subsample=1):
     Returns:
     - pd.DataFrame: DataFrame containing Kentucky points with coordinates, values, and timestamps
     """
+    start_time = time.time()
     print(f"Subsetting {bil_file} to Kentucky region...")
 
     with rasterio.open(bil_file) as src:
@@ -153,7 +191,8 @@ def subset_bil_to_kentucky(bil_file, var_type, timestamp, subsample=1):
         if nodata is not None:
             df = df[df[var_type] != nodata]
 
-        print(f"Extracted {len(df)} Kentucky points")
+        elapsed = time.time() - start_time
+        print(f"Extracted {len(df)} Kentucky points in {elapsed:.2f} seconds")
 
     return df
 
@@ -169,6 +208,8 @@ def prep_station_data(station_data, random_state=None):
     Returns:
     - pd.DataFrame: Processed DataFrame ready for pyMICA
     """
+    start_time = time.time()
+
     # Add required columns
     station_data['key'] = range(1, len(station_data) + 1)
     station_data['dist'] = 0.0
@@ -190,6 +231,9 @@ def prep_station_data(station_data, random_state=None):
     existing_columns = [col for col in ordered_columns if col in station_data.columns]
     station_data = station_data.reindex(columns=existing_columns)
 
+    elapsed = time.time() - start_time
+    print(f"Prepared station data in {elapsed:.2f} seconds")
+
     return station_data
 
 
@@ -204,13 +248,14 @@ def add_elevation_to_dataframe(df, get_elevation):
     Returns:
     - pd.DataFrame: DataFrame with 'altitude' column updated
     """
+    start_time = time.time()
     print("Adding elevation data...")
 
     # Set up progress tracking for large datasets
     total_rows = len(df)
     report_interval = max(1, total_rows // 10)  # Report progress every 10%
 
-    # Update the altitude column
+    # Update the altitude column using vectorized operations for better performance
     elevations = []
     for i, (_, row) in enumerate(df.iterrows()):
         elevation = get_elevation(row['latitude'], row['longitude'])
@@ -223,6 +268,9 @@ def add_elevation_to_dataframe(df, get_elevation):
 
     # Add elevations to the dataframe
     df['altitude'] = elevations
+
+    elapsed = time.time() - start_time
+    print(f"Added elevation data in {elapsed:.2f} seconds")
 
     return df
 
@@ -241,6 +289,8 @@ def process_bil_file(bil_file_path, output_folder, subsample=1, random_state=Non
     Returns:
     - str: Path to the output CSV file
     """
+    file_start_time = time.time()
+
     # Extract filename from path
     filename = os.path.basename(bil_file_path)
 
@@ -277,12 +327,8 @@ def process_bil_file(bil_file_path, output_folder, subsample=1, random_state=Non
 
         # If DEM file path is provided, add elevation data
         if dem_file_path:
-            # Initialize elevation lookup
-            grid_points, elevation_values = downsample_dem_data(
-                *load_dem_data(dem_file_path),
-                factor=20
-            )
-            get_elevation = create_elevation_lookup(grid_points, elevation_values)
+            # Get the global elevation lookup function (initialize if needed)
+            get_elevation = initialize_elevation_lookup(dem_file_path)
 
             # Add elevation data
             ky_data_df = add_elevation_to_dataframe(ky_data_df, get_elevation)
@@ -291,11 +337,15 @@ def process_bil_file(bil_file_path, output_folder, subsample=1, random_state=Non
         processed_df = prep_station_data(ky_data_df, random_state=random_state)
 
         # Save to CSV
+        save_start_time = time.time()
         processed_df.to_csv(csv_output, index=False)
-        print(f"Saved {len(processed_df)} points to {csv_output}")
+        save_elapsed = time.time() - save_start_time
+        print(f"Saved {len(processed_df)} points to {csv_output} in {save_elapsed:.2f} seconds")
+
+        file_elapsed = time.time() - file_start_time
 
         # Print summary
-        print(f"Processed: {filename}")
+        print(f"Processed: {filename} in {file_elapsed:.2f} seconds")
         print(f"├─ Product: {product}")
         print(f"├─ Variable: {variable}")
         print(f"├─ Region: Kentucky (subset from {region})")
@@ -332,13 +382,17 @@ def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_s
     error_files = []
 
     # Record start time
-    start_time = time.time()
+    total_start_time = time.time()
 
     print(f"Starting to process BIL files in: {input_dir}")
     print(f"Output will be saved to: {output_dir}")
     print(f"Subsample factor: {subsample}")
     print(f"Kentucky bounding box: Lon ({KY_MIN_LON}, {KY_MAX_LON}), Lat ({KY_MIN_LAT}, {KY_MAX_LAT})")
     print("-" * 50)
+
+    # Initialize elevation lookup if DEM file is provided
+    if dem_file_path:
+        initialize_elevation_lookup(dem_file_path)
 
     # Get all BIL files and sort them alphanumerically
     bil_files = [f for f in os.listdir(input_dir) if f.endswith(".bil")]
@@ -358,12 +412,14 @@ def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_s
     print(f"Found {len(bil_files)} BIL files to process")
 
     # Process files in order
+    file_times = []
     for file_index, filename in enumerate(bil_files):
         # Full path to the file
         bil_file_path = os.path.join(input_dir, filename)
 
         try:
             print(f"Processing {file_index + 1}/{len(bil_files)}: {filename}")
+            file_start_time = time.time()
 
             # Process the file
             output_file = process_bil_file(
@@ -374,20 +430,29 @@ def process_directory(input_dir, output_dir, pattern=None, subsample=1, random_s
                 dem_file_path
             )
 
+            file_elapsed = time.time() - file_start_time
+            file_times.append(file_elapsed)
+
             if output_file:
                 output_files.append(output_file)
                 processed_count += 1
+                print(f"File processed in {file_elapsed:.2f} seconds")
 
         except Exception as e:
             print(f"Error processing {filename}: {str(e)}")
             error_files.append(filename)
 
     # Calculate processing time
-    elapsed_time = time.time() - start_time
+    total_elapsed = time.time() - total_start_time
 
     # Print summary
     print("\n" + "=" * 50)
-    print(f"Processing completed in {elapsed_time:.2f} seconds")
+    print(f"Processing completed in {total_elapsed:.2f} seconds")
+    if file_times:
+        avg_time = sum(file_times) / len(file_times)
+        print(f"Average processing time per file: {avg_time:.2f} seconds")
+        print(f"Fastest file: {min(file_times):.2f} seconds")
+        print(f"Slowest file: {max(file_times):.2f} seconds")
     print(f"Processed {processed_count} files")
     print(f"Generated {len(output_files)} CSV files")
     if error_files:
@@ -411,6 +476,8 @@ def generate_pymica_sample(csv_path, sample_size=10, output_dir=None):
     Returns:
     - list: List of dictionaries in pyMICA format
     """
+    start_time = time.time()
+
     # Read the CSV file
     station_data = pd.read_csv(csv_path)
 
@@ -452,6 +519,9 @@ def generate_pymica_sample(csv_path, sample_size=10, output_dir=None):
             'dist': float(df_data['dist'].iloc[0])
         })
 
+    elapsed = time.time() - start_time
+    print(f"Generated pyMICA sample in {elapsed:.2f} seconds")
+
     # If output_dir is provided, create a structured path for the sample data
     if output_dir:
         sample_dir = os.path.join(output_dir, variable, year)
@@ -463,6 +533,8 @@ def generate_pymica_sample(csv_path, sample_size=10, output_dir=None):
 
 def main():
     """Main execution function."""
+    total_start_time = time.time()
+
     parser = argparse.ArgumentParser(description="Process PRISM BIL files for Kentucky region")
     parser.add_argument("input_dir", help="Directory containing BIL files to process")
     parser.add_argument("--output_dir", default=None,
@@ -496,6 +568,7 @@ def main():
     print("\n")
 
     # Process the directory
+    dir_start_time = time.time()
     _, output_files = process_directory(
         args.input_dir,
         args.output_dir,
@@ -504,9 +577,12 @@ def main():
         args.random_state,
         args.dem_file
     )
+    dir_elapsed = time.time() - dir_start_time
+    print(f"Directory processing completed in {dir_elapsed:.2f} seconds")
 
     # Generate pyMICA sample if requested
     if args.pymica_sample and output_files:
+        sample_start_time = time.time()
         first_file = output_files[0]
         print(f"\nGenerating pyMICA sample data from {first_file}...")
         sample_data, sample_path = generate_pymica_sample(first_file, sample_size=10, output_dir=args.output_dir)
@@ -519,7 +595,12 @@ def main():
         import json
         with open(sample_path, 'w') as f:
             json.dump(sample_data, f, indent=2)
-        print(f"\nSaved pyMICA sample data to: {sample_path}")
+        sample_elapsed = time.time() - sample_start_time
+        print(f"\nSaved pyMICA sample data to: {sample_path} in {sample_elapsed:.2f} seconds")
+
+    # Total runtime
+    total_elapsed = time.time() - total_start_time
+    print(f"\nTotal script runtime: {total_elapsed:.2f} seconds")
 
 
 if __name__ == "__main__":
