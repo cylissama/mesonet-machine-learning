@@ -1,11 +1,8 @@
 
-# Work Notes
+# Mesonet Tasks/General Notes
 ###### Kentucky Mesonet Spring Machine Learning Efforts
 
-#### Contained here is the ml-soundings-archive-main
-This dir is the codebase of the Aies paper discussing data with ml
-
-Install Pymica
+## Links
 
 #### [ MOOC Course ](https://learning.ecmwf.int/course/view.php?id=46)
 
@@ -97,4 +94,25 @@ Review literature on machine learning algoriths and inter[olationg materolgical 
 ### Kelcee
 - Feature extraction
 - look over machine learning notes in google drive (Lecture 2 - feature extraction)
+
+# Summer Team Meeting
+
+## May 5
+
+### Objective for the Summer
+- take any lat & long in the state and be able to tell all the variables at that location
+- be able to forecast (in realtime) and see what kind of process are hapening near the surface of the earth and in verticle profiles
+
+###
+- on google drive MLsummer25 (basis for all summer work)
+- PRISM data only has avergae values at a daily basis
+- - we want to work at instantaneously
+- - so we train with mesonet data as well
+ 
+### Machine Learning Course
+- look through courses
+- look over meterology papers
+- 
+
+
 
