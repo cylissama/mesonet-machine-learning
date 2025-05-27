@@ -112,7 +112,19 @@ Review literature on machine learning algoriths and inter[olationg materolgical 
 ### Machine Learning Course
 - look through courses
 - look over meterology papers
-- 
 
+## Tue May 27
+
+### about gap filling
+wants to gap fill over short periods, like days at most
+
+go back to our python code, go and fill missings with NAN
+- want to get 30 min down to 5 min data
+- replace all missing values with NAN (should be easy)
+- the 0s in the PRCP are correct, dont replace them
+- things like ATMOSHPERIC PRESSURE with 0s should be NAN
+- find when NANs occur column by column
+
+# These notes are being moved to my macbook and not stored here
 
 
